@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لعبة الشك المحلية</title>
-    <!-- مكتبة التوصيل المباشر بين الموبايلات PeerJS + مكتبة اكتشاف الغرف التلقائي MQTT -->
+    <!-- مكتبات التوصيل مع معالجة الأخطاء -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
@@ -12,9 +12,7 @@
             --bg: #0f172a;
             --panel: #1e293b;
             --accent: #2563eb;
-            --accent-hover: #1d4ed8;
             --danger: #dc2626;
-            --danger-hover: #b91c1c;
             --success: #16a34a;
             --text: #f8fafc;
             --subtext: #94a3b8;
@@ -30,26 +28,22 @@
         .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         
         .avatar-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 15px 0; }
-        .avatar-btn { font-size: 1.8rem; background: #0f172a; border: 2px solid transparent; border-radius: 12px; padding: 8px; cursor: pointer; text-align: center; transition: all 0.2s; }
+        .avatar-btn { font-size: 1.8rem; background: #0f172a; border: 2px solid transparent; border-radius: 12px; padding: 8px; cursor: pointer; text-align: center; }
         .avatar-btn.selected { border-color: var(--accent); background: #1e3a8a; transform: scale(1.1); }
         
         input[type="text"], input[type="number"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; margin-top: 5px; font-size: 1rem; }
         
-        .btn { background: var(--accent); color: white; border: none; padding: 14px; border-radius: 8px; width: 100%; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; transition: background 0.2s; }
-        .btn:hover { background: var(--accent-hover); }
+        .btn { background: var(--accent); color: white; border: none; padding: 14px; border-radius: 8px; width: 100%; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .btn-success { background: var(--success); }
         .btn-danger { background: var(--danger); }
         .btn-secondary { background: #475569; }
         
         .checkbox-group { display: flex; flex-direction: column; gap: 12px; margin: 15px 0; background: #0f172a; padding: 12px; border-radius: 8px; }
-        .checkbox-group label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.95rem; }
-        .checkbox-group input { width: 18px; height: 18px; }
+        .checkbox-group label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
         
         .room-card { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-        .room-info { display: flex; align-items: center; gap: 10px; }
-        
         ul { list-style: none; padding: 0; margin: 10px 0; }
-        li { background: #0f172a; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        li { background: #0f172a; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; }
         
         .wheel-box { text-align: center; font-size: 3.5rem; margin: 20px 0; animation: spin 0.6s infinite linear; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -68,17 +62,15 @@
         <button class="btn" onclick="saveProfile()">حفظ ومتابعة</button>
     </div>
 
-    <!-- 2. الشاشة الرئيسية للغرف المتاحة -->
+    <!-- 2. الشاشة الرئيسية للغرف -->
     <div id="screen-main" class="card hidden">
         <div class="top-bar">
             <h3 style="margin:0;"><span id="user-avatar-display"></span> <span id="user-name-display"></span></h3>
             <button class="btn btn-secondary" style="width: auto; padding: 6px 12px; margin:0;" onclick="toggleSettings()">⚙️ الإعدادات</button>
         </div>
 
-        <!-- لوحة الإعدادات -->
         <div id="settings-panel" class="card hidden" style="background: #0f172a; margin-bottom: 15px;">
             <h4>⚙️ الإعدادات</h4>
-            <button class="btn btn-secondary" onclick="toggleLanguage()" id="btn-lang-toggle">🌐 Switch to English</button>
             <button class="btn btn-danger" onclick="signOut()">تسجيل الخروج</button>
         </div>
 
@@ -111,7 +103,7 @@
         <button class="btn btn-secondary" onclick="showScreen('screen-main')">إلغاء</button>
     </div>
 
-    <!-- 4. شاشة الانتظار (Lobby) -->
+    <!-- 4. شاشة الانتظار -->
     <div id="screen-lobby" class="card hidden">
         <h3>غرفة الانتظار</h3>
         <p style="text-align: center; color: var(--subtext); margin: 5px 0;">اللاعبون المتصلون: <strong id="lobby-count-num">1</strong> / 4</p>
@@ -146,7 +138,6 @@
 </div>
 
 <script>
-    // --- متغيرات الحالة العامة ---
     let currentUser = { name: '', avatar: '👤' };
     let selectedAvatarIndex = 0;
     let peer = null;
@@ -158,9 +149,9 @@
     let alarmAudioInterval = null;
 
     const avatarIcons = ['👤', '🐱', '🦊', '🐸', '🤖', '🐼', '🦁', '🐯', '👻', '💀'];
-    const MQTT_TOPIC = 'egypt_local_among_us_game_rooms_v2';
+    const MQTT_TOPIC = 'egypt_local_among_us_game_rooms_v3';
 
-    // --- بناء الأفاتارات ---
+    // إنشاء الأفاتارات
     const avatarGrid = document.getElementById('avatar-container');
     avatarIcons.forEach((icon, index) => {
         const btn = document.createElement('div');
@@ -175,7 +166,6 @@
         avatarGrid.appendChild(btn);
     });
 
-    // --- حفظ الملف الشخصي والاتصال ---
     function saveProfile() {
         const nameInput = document.getElementById('input-username').value.trim();
         if (!nameInput) return alert('يرجى كتابة اسمك أولاً!');
@@ -191,29 +181,32 @@
         document.getElementById('user-name-display').innerText = currentUser.name;
         showScreen('screen-main');
 
-        // إنشاء معرف P2P مجاني
-        myPeerId = 'peer_' + Math.random().toString(36).substr(2, 9);
-        peer = new Peer(myPeerId);
+        try {
+            myPeerId = 'peer_' + Math.random().toString(36).substr(2, 9);
+            if (window.Peer) {
+                peer = new Peer(myPeerId);
+            }
 
-        // الاتصال بخادم الاكتشاف التلقائي للغرف
-        mqttClient = mqtt.connect('wss://test.mosquitto.org:8081');
+            if (window.mqtt) {
+                mqttClient = mqtt.connect('wss://test.mosquitto.org:8081');
+                mqttClient.on('connect', () => {
+                    mqttClient.subscribe(MQTT_TOPIC);
+                });
 
-        mqttClient.on('connect', () => {
-            mqttClient.subscribe(MQTT_TOPIC);
-        });
+                mqttClient.on('message', (topic, message) => {
+                    try {
+                        const roomData = JSON.parse(message.toString());
+                        if (roomData.peerId !== myPeerId) {
+                            activeRoomsMap[roomData.peerId] = roomData;
+                            renderActiveRoomsList();
+                        }
+                    } catch (e) {}
+                });
+            }
+        } catch (err) {
+            console.log("Network fallback initialized", err);
+        }
 
-        // الاستماع للغرف المفتوحة جديدة
-        mqttClient.on('message', (topic, message) => {
-            try {
-                const roomData = JSON.parse(message.toString());
-                if (roomData.peerId !== myPeerId) {
-                    activeRoomsMap[roomData.peerId] = roomData;
-                    renderActiveRoomsList();
-                }
-            } catch (e) {}
-        });
-
-        // تنظيف الغرف القديمة كل 5 ثواني
         setInterval(() => {
             const now = Date.now();
             Object.keys(activeRoomsMap).forEach(id => {
@@ -236,12 +229,9 @@
 
         container.innerHTML = rooms.map(r => `
             <div class="room-card">
-                <div class="room-info">
-                    <span style="font-size: 1.8rem;">${r.avatar}</span>
-                    <div>
-                        <strong>${r.hostName} فاتح روم</strong>
-                        <div style="font-size: 0.8rem; color: var(--subtext);">عدد الغرف: ${r.bedrooms}</div>
-                    </div>
+                <div>
+                    <strong>${r.avatar} ${r.hostName} فاتح روم</strong>
+                    <div style="font-size: 0.8rem; color: var(--subtext);">عدد الغرف: ${r.bedrooms}</div>
                 </div>
                 <button class="btn btn-success" style="width: auto; padding: 8px 15px; margin: 0;" onclick="joinRoomDirect('${r.peerId}')">انضمام الآن 🚀</button>
             </div>
@@ -270,14 +260,12 @@
         if (parseInt(roomInput.value) < min) roomInput.value = min;
     }
 
-    // --- الهوست: إنشاء غرفة وبثها ---
     function hostCreateRoom() {
         isHost = true;
         showScreen('screen-lobby');
 
         const bedrooms = document.getElementById('input-bedroom-count').value;
 
-        // إرسال إشارة إعلان للغرفة كل ثانيتين لكي يراها الجميع
         setInterval(() => {
             if (isHost && mqttClient) {
                 mqttClient.publish(MQTT_TOPIC, JSON.stringify({
@@ -293,15 +281,16 @@
         connectedPeers = [{ name: currentUser.name, avatar: currentUser.avatar }];
         renderLobbyPlayers();
 
-        // استقبال اتصالات الأصدقاء
-        peer.on('connection', (conn) => {
-            conn.on('data', (data) => {
-                if (data.type === 'JOIN') {
-                    connectedPeers.push({ name: data.name, avatar: data.avatar, conn: conn });
-                    broadcastLobbyState();
-                }
+        if (peer) {
+            peer.on('connection', (conn) => {
+                conn.on('data', (data) => {
+                    if (data.type === 'JOIN') {
+                        connectedPeers.push({ name: data.name, avatar: data.avatar, conn: conn });
+                        broadcastLobbyState();
+                    }
+                });
             });
-        });
+        }
     }
 
     function broadcastLobbyState() {
@@ -312,11 +301,11 @@
         });
     }
 
-    // --- الضيف: الانضمام المباشر للغرفة ---
     function joinRoomDirect(hostPeerId) {
         showScreen('screen-lobby');
-        const conn = peer.connect(hostPeerId);
+        if (!peer) return;
 
+        const conn = peer.connect(hostPeerId);
         conn.on('open', () => {
             conn.send({ type: 'JOIN', name: currentUser.name, avatar: currentUser.avatar });
         });
@@ -344,7 +333,6 @@
         }
     }
 
-    // --- بدء اللعبة وتوزيع الأدوار ---
     function startWheelAndGame() {
         const roles = {};
         const imposterIndex = Math.floor(Math.random() * connectedPeers.length);
@@ -436,7 +424,6 @@
         location.reload();
     }
 
-    // التحقق التلقائي
     const savedUser = localStorage.getItem('game_user');
     if (savedUser) {
         currentUser = JSON.parse(savedUser);
